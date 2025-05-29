@@ -1,0 +1,19 @@
+{
+  "id": "hnl_launcher",
+  "name": "HealthNote Launcher",
+  "shortName": "HNL Launch",
+  "version": "0.01",
+  "description": "Custom app launcher for HealthNote Labs Bangle.js applications. Provides quick access to all HNL apps.",
+  "icon": "app.png",
+  "type": "launch",
+  "tags": "launcher,tool,healthnotelabs",
+  "supports": ["BANGLEJS2"],
+  "readme": "README.md",
+  "storage": [
+    {"name":"hnl_launcher.app.js","url":"app.js"},
+    {"name":"hnl_launcher.img","url":"app-icon.js","evaluate":true}
+  ],
+  "data": [
+    {"name":"hnl_launcher.json"} 
+  ]
+} 
