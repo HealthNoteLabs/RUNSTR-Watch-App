@@ -1,0 +1,6 @@
+0.01: Initial release
+  - Basic run tracking with GPS
+  - Real-time display of time, distance, pace, and steps
+  - Run data saved to storage
+  - Touch controls for start/stop
+  - Metric and imperial unit support 

@@ -1,0 +1,167 @@
+<html>
+  <head>
+    <link rel="stylesheet" href="../../css/spectre.min.css">
+    <style>
+      .run-item {
+        margin: 10px 0;
+        padding: 10px;
+        border: 1px solid #ddd;
+        border-radius: 5px;
+      }
+      .run-stats {
+        display: flex;
+        justify-content: space-between;
+        margin: 5px 0;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="container">
+      <h3>RUNSTR - Download Run Data</h3>
+      <div id="status">Connecting to watch...</div>
+      <div id="runs" style="display:none;">
+        <h4>Saved Runs</h4>
+        <div id="runList"></div>
+        <button id="downloadAll" class="btn btn-primary">Download All Runs</button>
+        <button id="clearAll" class="btn btn-error">Clear All Runs</button>
+      </div>
+    </div>
+    
+    <script src="../../core/lib/interface.js"></script>
+    <script>
+      let allRuns = [];
+      
+      function formatTime(ms) {
+        let totalSeconds = Math.floor(ms / 1000);
+        let hours = Math.floor(totalSeconds / 3600);
+        let minutes = Math.floor((totalSeconds % 3600) / 60);
+        let seconds = totalSeconds % 60;
+        
+        if (hours > 0) {
+          return hours + ":" + ("0"+minutes).substr(-2) + ":" + ("0"+seconds).substr(-2);
+        } else {
+          return minutes + ":" + ("0"+seconds).substr(-2);
+        }
+      }
+      
+      function formatDistance(meters, units = "km") {
+        if (units === "mi") {
+          let miles = meters * 0.000621371;
+          return miles.toFixed(2) + " mi";
+        } else {
+          let km = meters / 1000;
+          return km.toFixed(2) + " km";
+        }
+      }
+      
+      function downloadRun(runData, filename) {
+        // Create GPX file
+        let gpx = '<?xml version="1.0" encoding="UTF-8"?>\n';
+        gpx += '<gpx version="1.1" creator="RUNSTR Bangle.js App">\n';
+        gpx += '  <metadata>\n';
+        gpx += '    <time>' + new Date(runData.startTime).toISOString() + '</time>\n';
+        gpx += '  </metadata>\n';
+        gpx += '  <trk>\n';
+        gpx += '    <name>RUNSTR Run</name>\n';
+        gpx += '    <trkseg>\n';
+        
+        if (runData.gpsCoords) {
+          runData.gpsCoords.forEach(coord => {
+            gpx += '      <trkpt lat="' + coord.lat + '" lon="' + coord.lon + '">\n';
+            if (coord.alt) gpx += '        <ele>' + coord.alt + '</ele>\n';
+            if (coord.time) gpx += '        <time>' + new Date(coord.time).toISOString() + '</time>\n';
+            gpx += '      </trkpt>\n';
+          });
+        }
+        
+        gpx += '    </trkseg>\n';
+        gpx += '  </trk>\n';
+        gpx += '</gpx>';
+        
+        // Download GPX file
+        let blob = new Blob([gpx], {type: 'application/gpx+xml'});
+        let url = URL.createObjectURL(blob);
+        let a = document.createElement('a');
+        a.href = url;
+        a.download = filename.replace('.json', '.gpx');
+        a.click();
+        
+        // Also download JSON data
+        setTimeout(() => {
+          let jsonBlob = new Blob([JSON.stringify(runData, null, 2)], {type: 'application/json'});
+          let jsonUrl = URL.createObjectURL(jsonBlob);
+          let jsonA = document.createElement('a');
+          jsonA.href = jsonUrl;
+          jsonA.download = filename;
+          jsonA.click();
+        }, 500);
+      }
+      
+      function loadRuns() {
+        // Get list of run files
+        Puck.eval('require("Storage").list(/^runstr\\.run\\..*\\.json$/).map(f=>({name:f,data:require("Storage").readJSON(f)}))', (runs) => {
+          if (!runs || runs.length === 0) {
+            document.getElementById('status').innerHTML = 'No runs found on watch';
+            return;
+          }
+          
+          allRuns = runs;
+          document.getElementById('status').style.display = 'none';
+          document.getElementById('runs').style.display = 'block';
+          
+          let runList = document.getElementById('runList');
+          runList.innerHTML = '';
+          
+          // Get settings to know units
+          Puck.eval('require("Storage").readJSON("runstr.json",true)||{}', (settings) => {
+            let units = settings.units || "km";
+            
+            runs.forEach((run, idx) => {
+              if (!run.data) return;
+              
+              let date = new Date(run.data.startTime);
+              let runDiv = document.createElement('div');
+              runDiv.className = 'run-item';
+              
+              runDiv.innerHTML = `
+                <h5>Run ${idx + 1} - ${date.toLocaleDateString()} ${date.toLocaleTimeString()}</h5>
+                <div class="run-stats">
+                  <span>Duration: ${formatTime(run.data.duration)}</span>
+                  <span>Distance: ${formatDistance(run.data.distance, units)}</span>
+                </div>
+                <div class="run-stats">
+                  <span>Steps: ${run.data.steps || 0}</span>
+                  <span>GPS Points: ${run.data.gpsCoords ? run.data.gpsCoords.length : 0}</span>
+                </div>
+                <button class="btn btn-sm" onclick="downloadRun(allRuns[${idx}].data, '${run.name}')">Download</button>
+              `;
+              
+              runList.appendChild(runDiv);
+            });
+          });
+        });
+      }
+      
+      function onInit() {
+        loadRuns();
+      }
+      
+      document.getElementById('downloadAll').addEventListener('click', function() {
+        allRuns.forEach((run, idx) => {
+          setTimeout(() => {
+            downloadRun(run.data, run.name);
+          }, idx * 1000); // Stagger downloads
+        });
+      });
+      
+      document.getElementById('clearAll').addEventListener('click', function() {
+        if (confirm('Are you sure you want to delete all runs from the watch?')) {
+          Puck.eval('require("Storage").list(/^runstr\\.run\\..*\\.json$/).forEach(f=>require("Storage").erase(f))', () => {
+            alert('All runs deleted');
+            loadRuns();
+          });
+        }
+      });
+    </script>
+  </body>
+</html> 
