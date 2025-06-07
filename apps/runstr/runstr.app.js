@@ -52,15 +52,16 @@ function prepareRunDataForSync() {
 function updateBLECharacteristic(jsonData) {
   if (jsonData) { // Check if there is data to send
     try {
-      let servicesToUpdate = {};
-      let characteristic = {};
-      characteristic[RUNSTR_DATA_CHAR_UUID] = {
-        value: jsonData,
-        readable: true,
-        notify: false
-      };
-      servicesToUpdate[RUNSTR_SERVICE_UUID] = characteristic;
-      NRF.updateServices(servicesToUpdate);
+      NRF.updateServices({
+        [RUNSTR_SERVICE_UUID]: {
+          [RUNSTR_DATA_CHAR_UUID]: {
+            value: jsonData,
+            readable: true,
+            notify: false, // No notifications for this MVP, just readable
+            // maxLen: 512 // Set if a larger payload is expected and supported
+          }
+        }
+      });
       print("RUNSTR: BLE characteristic updated.");
       Bangle.buzz(100,1); // Short buzz to indicate ready for sync / updated
     } catch (e) {
@@ -73,16 +74,18 @@ function updateBLECharacteristic(jsonData) {
 
 // Setup BLE Services
 function setupBLE() {
-  let services = {};
-  let characteristics = {};
-  characteristics[RUNSTR_DATA_CHAR_UUID] = {
-    value: "{\"status\":\"no_run_data\"}", // Initial value, properly escaped JSON
-    readable: true,
-    description: "RUNSTR Run Data"
-  };
-  services[RUNSTR_SERVICE_UUID] = characteristics;
-
-  NRF.setServices(services, {
+  NRF.setServices({
+    [RUNSTR_SERVICE_UUID]: { // Primary service for RUNSTR
+      [RUNSTR_DATA_CHAR_UUID]: { // Characteristic for run data
+        value: "{\"status\":\"no_run_data\"}", // Initial value, properly escaped JSON
+        readable: true,
+        // notify: true, // Future: could notify phone app when data is ready
+        // writable: true, // Future: could allow phone to acknowledge sync
+        description: "RUNSTR Run Data"
+        // maxLen: 512 // Max length of the characteristic value in bytes
+      }
+    }
+  }, {
     advertise: [RUNSTR_SERVICE_UUID], // Advertise the service UUID
     uart: false // Turn off Nordic UART service to save space if not used
   });
@@ -153,11 +156,11 @@ function calculateDistance(lat1, lon1, lat2, lon2) {
 function drawScreen() {
   g.clear();
   g.setColor(1,1,1);
-  g.setFont("Vector",20);
+  g.setFont("6x8",2);
   
   // Title
   g.setFontAlign(0,-1);
-  g.drawString("RUNSTR", g.getWidth()/2, 10);
+  g.drawString("RUNSTR", g.getWidth()/2, 5);
   
   // Draw status
   if (running) {
@@ -165,52 +168,46 @@ function drawScreen() {
     runData.duration = Date.now() - runData.startTime;
     
     // Time
-    g.setFont("Vector",40);
+    g.setFont("6x8",3);
     g.setFontAlign(0,0);
-    g.drawString(formatTime(runData.duration), g.getWidth()/2, 55);
+    g.drawString(formatTime(runData.duration), g.getWidth()/2, 40);
     
     // Distance
     g.setFont("6x8",2);
-    g.setFontAlign(0, -1);
-    g.drawString(formatDistance(runData.distance), g.getWidth()/2, 95);
+    g.drawString(formatDistance(runData.distance), g.getWidth()/2, 80);
     
     // Pace
     if (settings.showPace && runData.pace > 0) {
-      g.setFont("6x8",2);
-      g.drawString("Pace: " + formatPace(runData.pace), g.getWidth()/2, 120);
+      g.setFont("6x8",1);
+      g.drawString("Pace: " + formatPace(runData.pace) + "/" + (settings.units === "mi" ? "mi" : "km"), g.getWidth()/2, 110);
     }
     
     // Steps
-    g.setFont("6x8",2);
-    g.drawString("Steps: " + runData.steps, g.getWidth()/2, 140);
+    g.setFont("6x8",1);
+    g.drawString("Steps: " + runData.steps, g.getWidth()/2, 130);
     
-    // Stop button area
-    const btnY = 170;
+    // Stop button
     g.setColor(0xF800); // Red
-    g.fillRect(0, btnY, g.getWidth(), g.getHeight());
+    g.fillRect(70, 170, 170, 210);
     g.setColor(1,1,1);
-    g.setFont("Vector",30);
-    g.setFontAlign(0,0);
-    g.drawString("STOP", g.getWidth()/2, btnY + (g.getHeight()-btnY)/2);
-
+    g.setFont("6x8",2);
+    g.drawString("STOP", g.getWidth()/2, 190);
   } else {
     // Not running - show start screen or summary screen
     if (runData.startTime && runData.duration > 0) { // Summary Screen
       showSummary();
     } else { // Start Screen
-      g.setFont("6x8", 2);
+      g.setFont("6x8",1);
       g.setFontAlign(0,0);
       g.drawString("Track your runs", g.getWidth()/2, 60);
       g.drawString("with GPS", g.getWidth()/2, 80);
       
-      // Start button area
-      const btnY = 120;
+      // Start button
       g.setColor(0x07E0); // Green
-      g.fillRect(0, btnY, g.getWidth(), g.getHeight());
+      g.fillRect(70, 120, 170, 180);
       g.setColor(0,0,0);
-      g.setFont("Vector",40);
-      g.setFontAlign(0,0);
-      g.drawString("START", g.getWidth()/2, btnY + (g.getHeight()-btnY)/2);
+      g.setFont("6x8",3);
+      g.drawString("START", g.getWidth()/2, 150);
     }
   }
 }
@@ -223,7 +220,7 @@ function startRun() {
     duration: 0,
     pace: 0,
     calories: 0,
-    steps: 0, // Will be calculated against initialStepCountForRun
+    steps: stepCount, // Initial steps at start of run
     gpsCoords: []
   };
   
@@ -254,8 +251,9 @@ function stopRun() {
   }
   
   // Calculate final stats
-  // duration is updated by drawScreen
-  // steps are updated by Bangle.on('step')
+  // runData.duration is already updated by drawScreen interval
+  // Update steps one last time if needed, though Bangle.on('step') should be current
+  // runData.steps will be (current total steps) - (total steps at start of run)
 
   // Save run data
   let filename = "runstr.run." + Date.now() + ".json";
@@ -274,85 +272,82 @@ function stopRun() {
 function showSummary() {
   g.clear();
   g.setColor(1,1,1);
-  g.setFont("Vector",20);
-  g.setFontAlign(0,-1);
-  g.drawString("RUN COMPLETE", g.getWidth()/2, 10);
-
   g.setFont("6x8",2);
+  g.setFontAlign(0,-1);
+  g.drawString("RUN COMPLETE", g.getWidth()/2, 5);
+
+  g.setFont("6x8",1);
   g.setFontAlign(0,0);
 
   // Time
-  g.drawString("Time: " + formatTime(runData.duration), g.getWidth()/2, 50);
+  g.drawString("Time: " + formatTime(runData.duration), g.getWidth()/2, 40);
 
   // Distance
-  g.drawString("Distance: " + formatDistance(runData.distance), g.getWidth()/2, 75);
+  g.drawString("Distance: " + formatDistance(runData.distance), g.getWidth()/2, 60);
 
   // Average pace
   let avgPace = runData.duration > 0 ? runData.distance / (runData.duration / 1000) : 0;
-  g.drawString("Avg Pace: " + formatPace(avgPace), g.getWidth()/2, 100);
+  g.drawString("Avg Pace: " + formatPace(avgPace) + "/" + (settings.units === "mi" ? "mi" : "km"), g.getWidth()/2, 80);
 
   // Steps
-  g.drawString("Steps: " + runData.steps, g.getWidth()/2, 125);
+  g.drawString("Steps: " + runData.steps, g.getWidth()/2, 100);
 
   // SYNC button
   g.setColor(0x07FF); // Cyan
-  g.fillRect(10, 150, 83, 190); 
+  g.fillRect(30, 130, 100, 170); // x1, y1, x2, y2
   g.setColor(0,0,0); // Black text
   g.setFont("6x8",2);
-  g.setFontAlign(0,0);
-  g.drawString("SYNC", 46, 170);
+  g.drawString("SYNC", 65, 150); // Centered in button
 
   // OK button
   g.setColor(0x001F); // Blue
-  g.fillRect(93, 150, 166, 190);
+  g.fillRect(140, 130, 210, 170); // x1, y1, x2, y2
   g.setColor(1,1,1); // White text
   g.setFont("6x8",2);
-  g.setFontAlign(0,0);
-  g.drawString("OK", 130, 170);
+  g.drawString("OK", 175, 150); // Centered in button
 }
 
 // Touch handler
 Bangle.on('touch', function(btn, xy) {
   if (running) {
-    // Check if stop button was pressed (anywhere in the bottom area)
-    if (xy.y >= 170) {
+    // Check if stop button was pressed
+    if (xy.y >= 170 && xy.y <= 210 && xy.x >= 70 && xy.x <= 170) {
       stopRun();
     }
   } else {
     // Not running - check buttons on current screen
     if (runData.startTime && runData.duration > 0) { // On Summary Screen
       // SYNC button pressed
-      if (xy.x >= 10 && xy.x <= 83 && xy.y >= 150 && xy.y <= 190) {
+      if (xy.x >= 30 && xy.x <= 100 && xy.y >= 130 && xy.y <= 170) {
         const runJson = prepareRunDataForSync();
         if (runJson) {
           updateBLECharacteristic(runJson);
            g.setFont("6x8",1);g.setColor(1,1,1);g.setFontAlign(0,0);
-           g.drawString("SYNCING...", g.getWidth()/2, 210); // Feedback message
+           g.drawString("SYNCING...", g.getWidth()/2, 190); // Feedback message
            setTimeout(() => { // Clear message and redraw summary or main screen
              if (runData.startTime && runData.duration > 0) showSummary(); else drawScreen();
            }, 2000);
         } else {
            g.setFont("6x8",1);g.setColor(1,1,1);g.setFontAlign(0,0);
-           g.drawString("NO DATA", g.getWidth()/2, 210);
+           g.drawString("NO DATA", g.getWidth()/2, 190);
            setTimeout(() => {
             if (runData.startTime && runData.duration > 0) showSummary(); else drawScreen();
            }, 2000);
         }
       }
       // OK button pressed on summary screen
-      else if (xy.x >= 93 && xy.x <= 166 && xy.y >= 150 && xy.y <= 190) {
+      else if (xy.x >= 140 && xy.x <= 210 && xy.y >= 130 && xy.y <= 170) {
         // Reset and go to main start screen
         runData = {
           startTime: null, distance: 0, duration: 0, pace: 0,
           calories: 0, steps: 0, gpsCoords: []
         };
         lastGPS = null;
-        initialStepCountForRun = 0;
         drawScreen(); 
       }
     } else { // On Start Screen
-      // Check if start button was pressed (anywhere in the bottom area)
-      if (xy.y >= 120) {
+      // Check if start button was pressed
+      if (xy.y >= 120 && xy.y <= 180 && xy.x >= 70 && xy.x <= 170) {
         startRun();
       }
     }
@@ -364,8 +359,8 @@ Bangle.on('GPS', function(gps) {
   if (!running || !gps.fix) return;
   
   let currentGPSTime = Date.now(); // Use current time for GPS point if gps.time is not reliable
-  if (gps.time && gps.time.getTime) currentGPSTime = gps.time.getTime(); // If gps.time is a Date object
-  else if (typeof gps.time === 'number' && gps.time > 1000000000000) currentGPSTime = gps.time; // if gps.time is already ms epoch
+  if (gps.time) currentGPSTime = gps.time.getTime(); // If gps.time is a Date object
+  else if (typeof gps.time === 'number') currentGPSTime = gps.time; // if gps.time is already ms epoch
 
   // Calculate distance from last position
   if (lastGPS && lastGPS.lat && lastGPS.lon) {
@@ -393,28 +388,31 @@ Bangle.on('GPS', function(gps) {
       lastGPS = {lat: gps.lat, lon: gps.lon, time: currentGPSTime, alt: gps.alt, speed: gps.speed};
     }
   } else {
+    lastGPS = {lat: gps.lat, lon: gps.lon, time: currentGPSTime, alt: gps.alt, speed: gps.speed};
     // Also add the first point
-     const firstPoint = {
+     runData.gpsCoords.push({
         lat: gps.lat,
         lon: gps.lon,
         time: currentGPSTime,
         alt: gps.alt,
         speed: gps.speed
-      };
-    runData.gpsCoords.push(firstPoint);
-    lastGPS = firstPoint;
+      });
   }
 });
 
 // Step counter
 let initialStepCountForRun = 0;
-Bangle.on('step', function() {
+Bangle.on('step', function(updatetime) { // updatetime is the time of the step event
   let currentTotalSteps = Bangle.getHealthStatus("day").steps;
   if (running) {
-    if (initialStepCountForRun === 0) { // First step event after run started
+    if (runData.startTime && initialStepCountForRun === 0) { // First step event after run started
         initialStepCountForRun = currentTotalSteps;
+        runData.steps = 0; // Initialize run steps
+    } else if (initialStepCountForRun > 0) {
+        runData.steps = currentTotalSteps - initialStepCountForRun;
     }
-    runData.steps = currentTotalSteps - initialStepCountForRun;
+  } else {
+      initialStepCountForRun = 0; // Reset when not running
   }
   stepCount = currentTotalSteps; // Keep track of total steps for app start
 });
@@ -433,9 +431,6 @@ E.on('kill', function() {
 });
 
 // Initialize
-Bangle.on('lcdPower', function(on) {
-  if (on) drawScreen();
-});
 stepCount = Bangle.getHealthStatus("day").steps; // Initialize stepCount on app load
 g.clear();
 setupBLE(); // Call BLE setup when the app starts

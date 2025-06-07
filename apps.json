@@ -1,0 +1,43 @@
+[
+  {
+    "id": "runstr",
+    "name": "RUNSTR - Run Tracker",
+    "shortName": "RUNSTR",
+    "version": "0.01",
+    "description": "A run tracking app for Bangle.js. Track your runs with GPS, view statistics, and sync with the RUNSTR phone app (coming soon).",
+    "icon": "app.png",
+    "tags": "health,outdoors,gps,tool",
+    "type": "app",
+    "supports": ["BANGLEJS2"],
+    "readme": "README.md",
+    "interface": "interface.html",
+    "storage": [
+      { "name": "runstr.app.js", "url": "apps/runstr/app.js" },
+      { "name": "runstr.img", "url": "apps/runstr/app-icon.js", "evaluate": true },
+      { "name": "runstr.settings.js", "url": "apps/runstr/settings.js" }
+    ],
+    "data": [
+      { "name": "runstr.json" },
+      { "wildcard": "runstr.run.*" }
+    ]
+  },
+  {
+    "id": "hnl_launcher",
+    "name": "HealthNote Launcher",
+    "shortName": "HNL Launch",
+    "version": "0.01",
+    "description": "Custom app launcher for HealthNote Labs Bangle.js applications. Provides quick access to all HNL apps.",
+    "icon": "app.png",
+    "type": "launch",
+    "tags": "launcher,tool,healthnotelabs",
+    "supports": ["BANGLEJS2"],
+    "readme": "README.md",
+    "storage": [
+      { "name": "hnl_launcher.app.js", "url": "apps/hnl_launcher/app.js" },
+      { "name": "hnl_launcher.img", "url": "apps/hnl_launcher/app-icon.js", "evaluate": true }
+    ],
+    "data": [
+      { "name": "hnl_launcher.json" }
+    ]
+  }
+] 
