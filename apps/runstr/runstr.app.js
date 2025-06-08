@@ -18,6 +18,7 @@ let runData = {
 let lastGPS = null;
 let updateInterval = null;
 let stepCount = 0;
+let gpsFix = { fix: 0 }; // To store GPS fix status
 
 let settings = Object.assign({
   units: "km", // km or mi
@@ -170,28 +171,33 @@ function drawScreen() {
     // Time
     g.setFont("6x8",3);
     g.setFontAlign(0,0);
-    g.drawString(formatTime(runData.duration), g.getWidth()/2, 40);
+    g.drawString(formatTime(runData.duration), g.getWidth()/2, 35);
     
     // Distance
     g.setFont("6x8",2);
-    g.drawString(formatDistance(runData.distance), g.getWidth()/2, 80);
+    g.drawString(formatDistance(runData.distance), g.getWidth()/2, 70);
     
     // Pace
     if (settings.showPace && runData.pace > 0) {
       g.setFont("6x8",1);
-      g.drawString("Pace: " + formatPace(runData.pace) + "/" + (settings.units === "mi" ? "mi" : "km"), g.getWidth()/2, 110);
+      g.drawString("Pace: " + formatPace(runData.pace) + "/" + (settings.units === "mi" ? "mi" : "km"), g.getWidth()/2, 100);
     }
     
     // Steps
     g.setFont("6x8",1);
-    g.drawString("Steps: " + runData.steps, g.getWidth()/2, 130);
+    g.drawString("Steps: " + runData.steps, g.getWidth()/2, 120);
+    
+    // GPS Status (small, at the bottom)
+    g.setFont("6x8",1);
+    g.setColor(gpsFix.fix ? 0x07E0 : 0xF800); // Green if fix, Red if not
+    g.drawString("GPS:" + (gpsFix.fix ? "OK" : "Wait"), g.getWidth()/2, 140);
     
     // Stop button
     g.setColor(0xF800); // Red
-    g.fillRect(70, 170, 170, 210);
+    g.fillRect(70, 160, 170, 200);
     g.setColor(1,1,1);
     g.setFont("6x8",2);
-    g.drawString("STOP", g.getWidth()/2, 190);
+    g.drawString("STOP", g.getWidth()/2, 180);
   } else {
     // Not running - show start screen or summary screen
     if (runData.startTime && runData.duration > 0) { // Summary Screen
@@ -201,6 +207,10 @@ function drawScreen() {
       g.setFontAlign(0,0);
       g.drawString("Track your runs", g.getWidth()/2, 60);
       g.drawString("with GPS", g.getWidth()/2, 80);
+      
+      // GPS Status
+      g.setColor(gpsFix.fix ? 0x07E0 : 0xF800); // Green for fix, Red for no fix
+      g.drawString(gpsFix.fix ? "GPS Ready" : "Waiting for GPS...", g.getWidth()/2, 100);
       
       // Start button
       g.setColor(0x07E0); // Green
@@ -224,8 +234,12 @@ function startRun() {
     gpsCoords: []
   };
   
-  // Start GPS
-  Bangle.setGPSPower(1);
+  // GPS is already on, just ensure we have a lastGPS point if fix is available
+  if(gpsFix.fix) {
+    lastGPS = {lat: gpsFix.lat, lon: gpsFix.lon, time: Date.now(), alt: gpsFix.alt, speed: gpsFix.speed};
+  } else {
+    lastGPS = null;
+  }
   
   // Vibrate to indicate start
   if (settings.vibrate) {
@@ -241,8 +255,7 @@ function startRun() {
 function stopRun() {
   running = false;
   
-  // Stop GPS
-  Bangle.setGPSPower(0);
+  // Don't stop GPS, it will be stopped on app exit
   
   // Clear update interval
   if (updateInterval) {
@@ -311,7 +324,7 @@ function showSummary() {
 Bangle.on('touch', function(btn, xy) {
   if (running) {
     // Check if stop button was pressed
-    if (xy.y >= 170 && xy.y <= 210 && xy.x >= 70 && xy.x <= 170) {
+    if (xy.y >= 160 && xy.y <= 200 && xy.x >= 70 && xy.x <= 170) {
       stopRun();
     }
   } else {
@@ -356,7 +369,18 @@ Bangle.on('touch', function(btn, xy) {
 
 // GPS handler
 Bangle.on('GPS', function(gps) {
-  if (!running || !gps.fix) return;
+  let oldFix = gpsFix.fix;
+  gpsFix = gps;
+
+  if (!running) {
+    // If not running, update screen if fix status changes
+    if (gpsFix.fix !== oldFix) {
+      drawScreen();
+    }
+    return;
+  }
+  
+  if (!gps.fix) return;
   
   let currentGPSTime = Date.now(); // Use current time for GPS point if gps.time is not reliable
   if (gps.time) currentGPSTime = gps.time.getTime(); // If gps.time is a Date object
@@ -419,10 +443,8 @@ Bangle.on('step', function(updatetime) { // updatetime is the time of the step e
 
 // Handle app exit
 E.on('kill', function() {
-  // Stop GPS if running
-  if (running) {
-    Bangle.setGPSPower(0);
-  }
+  // Stop GPS
+  Bangle.setGPSPower(0);
   
   // Clear intervals
   if (updateInterval) {
@@ -432,6 +454,7 @@ E.on('kill', function() {
 
 // Initialize
 stepCount = Bangle.getHealthStatus("day").steps; // Initialize stepCount on app load
+Bangle.setGPSPower(1); // Turn on GPS at app start
 g.clear();
 setupBLE(); // Call BLE setup when the app starts
 drawScreen(); 
