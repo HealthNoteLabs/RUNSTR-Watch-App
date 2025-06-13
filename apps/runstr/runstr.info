@@ -1,0 +1,7 @@
+{
+  "id": "runstr",
+  "name": "RUNSTR",
+  "src": "runstr.app.js",
+  "icon": "runstr.img",
+  "type": "app"
+} 

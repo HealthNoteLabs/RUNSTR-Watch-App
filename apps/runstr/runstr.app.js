@@ -57,14 +57,12 @@ function updateBLECharacteristic(jsonData) {
         [RUNSTR_SERVICE_UUID]: {
           [RUNSTR_DATA_CHAR_UUID]: {
             value: jsonData,
-            readable: true,
-            notify: false, // No notifications for this MVP, just readable
-            // maxLen: 512 // Set if a larger payload is expected and supported
+            notify: true
           }
         }
       });
-      print("RUNSTR: BLE characteristic updated.");
-      Bangle.buzz(100,1); // Short buzz to indicate ready for sync / updated
+      print("RUNSTR: BLE characteristic updated and notified.");
+      Bangle.buzz(100,1); // Short buzz to indicate data was sent
     } catch (e) {
       print("RUNSTR: Error updating BLE characteristic:", e);
     }
@@ -78,12 +76,26 @@ function setupBLE() {
   NRF.setServices({
     [RUNSTR_SERVICE_UUID]: { // Primary service for RUNSTR
       [RUNSTR_DATA_CHAR_UUID]: { // Characteristic for run data
-        value: "{\"status\":\"no_run_data\"}", // Initial value, properly escaped JSON
+        value: "{\"status\":\"no_run_data\"}", // Initial value
         readable: true,
-        // notify: true, // Future: could notify phone app when data is ready
-        // writable: true, // Future: could allow phone to acknowledge sync
+        notify: true,     // Allow notifications
+        writable: true,   // Allow phone to write to trigger sync
+        onWrite: function(evt) { // Handle writes from the phone
+          print("RUNSTR: Write received from central, preparing data.");
+          // Any write to this characteristic triggers a data sync.
+          const runJson = prepareRunDataForSync();
+          if (runJson) {
+            updateBLECharacteristic(runJson);
+            // Give user feedback on the watch screen
+            g.setFont("6x8",1);g.setColor(1,1,1);g.setFontAlign(0,0);
+            g.drawString("SENDING DATA...", g.getWidth()/2, 190);
+            setTimeout(() => { // Redraw summary after message
+               if (runData.startTime && runData.duration > 0) showSummary(); else drawScreen();
+            }, 2000);
+          }
+        },
         description: "RUNSTR Run Data"
-        // maxLen: 512 // Max length of the characteristic value in bytes
+        // maxLen: 512 // Consider uncommenting if JSON is large
       }
     }
   }, {
@@ -98,7 +110,7 @@ function setupBLE() {
   NRF.on('disconnect', function(reason) {
     print("RUNSTR: Disconnected, reason: " + reason);
   });
-  print("RUNSTR: BLE Sync Service Configured.");
+  print("RUNSTR: BLE Sync Service Configured with onWrite handler.");
 }
 
 // Helper functions
@@ -168,36 +180,34 @@ function drawScreen() {
     // Update duration
     runData.duration = Date.now() - runData.startTime;
     
-    // Time
-    g.setFont("6x8",3);
+    // Time (smaller to fit everything)
+    g.setFont("6x8",2);
     g.setFontAlign(0,0);
-    g.drawString(formatTime(runData.duration), g.getWidth()/2, 35);
+    g.drawString(formatTime(runData.duration), g.getWidth()/2, 30);
     
     // Distance
     g.setFont("6x8",2);
-    g.drawString(formatDistance(runData.distance), g.getWidth()/2, 70);
+    g.drawString(formatDistance(runData.distance), g.getWidth()/2, 55);
     
-    // Pace
-    if (settings.showPace && runData.pace > 0) {
-      g.setFont("6x8",1);
-      g.drawString("Pace: " + formatPace(runData.pace) + "/" + (settings.units === "mi" ? "mi" : "km"), g.getWidth()/2, 100);
-    }
-    
-    // Steps
+    // Pace and Steps on same line to save space
     g.setFont("6x8",1);
-    g.drawString("Steps: " + runData.steps, g.getWidth()/2, 120);
+    if (settings.showPace && runData.pace > 0) {
+      g.drawString("Pace:" + formatPace(runData.pace), g.getWidth()/2, 80);
+    }
+    g.drawString("Steps:" + runData.steps, g.getWidth()/2, 95);
     
-    // GPS Status (small, at the bottom)
+    // GPS Status - ALWAYS show this prominently
     g.setFont("6x8",1);
     g.setColor(gpsFix.fix ? 0x07E0 : 0xF800); // Green if fix, Red if not
-    g.drawString("GPS:" + (gpsFix.fix ? "OK" : "Wait"), g.getWidth()/2, 140);
+    g.drawString("GPS:" + (gpsFix.fix ? "OK" : "WAIT") + " (" + (runData.gpsCoords.length) + " pts)", g.getWidth()/2, 110);
+    g.setColor(1,1,1); // Reset color
     
-    // Stop button
+    // Stop button - moved up to fit on screen (176px height)
     g.setColor(0xF800); // Red
-    g.fillRect(70, 160, 170, 200);
+    g.fillRect(50, 130, 126, 160); // Smaller button that fits
     g.setColor(1,1,1);
     g.setFont("6x8",2);
-    g.drawString("STOP", g.getWidth()/2, 180);
+    g.drawString("STOP", g.getWidth()/2, 145);
   } else {
     // Not running - show start screen or summary screen
     if (runData.startTime && runData.duration > 0) { // Summary Screen
@@ -205,19 +215,36 @@ function drawScreen() {
     } else { // Start Screen
       g.setFont("6x8",1);
       g.setFontAlign(0,0);
-      g.drawString("Track your runs", g.getWidth()/2, 60);
-      g.drawString("with GPS", g.getWidth()/2, 80);
+      g.drawString("Track your runs", g.getWidth()/2, 50);
+      g.drawString("with GPS", g.getWidth()/2, 65);
       
-      // GPS Status
+      // GPS Status - ALWAYS visible and prominent
+      g.setFont("6x8",1);
       g.setColor(gpsFix.fix ? 0x07E0 : 0xF800); // Green for fix, Red for no fix
-      g.drawString(gpsFix.fix ? "GPS Ready" : "Waiting for GPS...", g.getWidth()/2, 100);
+      g.drawString(gpsFix.fix ? "GPS Ready" : "Getting GPS fix...", g.getWidth()/2, 85);
+      g.setColor(1,1,1); // Reset color
       
-      // Start button
-      g.setColor(0x07E0); // Green
-      g.fillRect(70, 120, 170, 180);
-      g.setColor(0,0,0);
-      g.setFont("6x8",3);
-      g.drawString("START", g.getWidth()/2, 150);
+      // Show GPS coordinates if available for debugging
+      if (gpsFix.lat && gpsFix.lon) {
+        g.setFont("6x8",1);
+        g.drawString("Lat:" + gpsFix.lat.toFixed(4), g.getWidth()/2, 100);
+        g.drawString("Lon:" + gpsFix.lon.toFixed(4), g.getWidth()/2, 115);
+      }
+      
+      // Start button - only enable if GPS is ready
+      if (gpsFix.fix) {
+        g.setColor(0x07E0); // Green
+        g.fillRect(50, 130, 126, 160);
+        g.setColor(0,0,0);
+        g.setFont("6x8",2);
+        g.drawString("START", g.getWidth()/2, 145);
+      } else {
+        g.setColor(0x7BEF); // Gray
+        g.fillRect(50, 130, 126, 160);
+        g.setColor(0,0,0);
+        g.setFont("6x8",1);
+        g.drawString("WAIT GPS", g.getWidth()/2, 145);
+      }
     }
   }
 }
@@ -332,21 +359,12 @@ Bangle.on('touch', function(btn, xy) {
     if (runData.startTime && runData.duration > 0) { // On Summary Screen
       // SYNC button pressed
       if (xy.x >= 30 && xy.x <= 100 && xy.y >= 130 && xy.y <= 170) {
-        const runJson = prepareRunDataForSync();
-        if (runJson) {
-          updateBLECharacteristic(runJson);
-           g.setFont("6x8",1);g.setColor(1,1,1);g.setFontAlign(0,0);
-           g.drawString("SYNCING...", g.getWidth()/2, 190); // Feedback message
-           setTimeout(() => { // Clear message and redraw summary or main screen
-             if (runData.startTime && runData.duration > 0) showSummary(); else drawScreen();
-           }, 2000);
-        } else {
-           g.setFont("6x8",1);g.setColor(1,1,1);g.setFontAlign(0,0);
-           g.drawString("NO DATA", g.getWidth()/2, 190);
-           setTimeout(() => {
-            if (runData.startTime && runData.duration > 0) showSummary(); else drawScreen();
-           }, 2000);
-        }
+        // This button now provides instructions. The sync is triggered by the phone app.
+        g.setFont("6x8",1);g.setColor(1,1,1);g.setFontAlign(0,0);
+        g.drawString("Use phone to sync", g.getWidth()/2, 190); // Feedback message
+        setTimeout(() => { // Clear message and redraw summary
+          if (runData.startTime && runData.duration > 0) showSummary(); else drawScreen();
+        }, 2500);
       }
       // OK button pressed on summary screen
       else if (xy.x >= 140 && xy.x <= 210 && xy.y >= 130 && xy.y <= 170) {
@@ -359,18 +377,36 @@ Bangle.on('touch', function(btn, xy) {
         drawScreen(); 
       }
     } else { // On Start Screen
-      // Check if start button was pressed
-      if (xy.y >= 120 && xy.y <= 180 && xy.x >= 70 && xy.x <= 170) {
-        startRun();
+      // Check if start button was pressed - only allow if GPS is ready
+      if (xy.y >= 130 && xy.y <= 160 && xy.x >= 50 && xy.x <= 126) {
+        if (gpsFix.fix && isValidGPSCoordinate(gpsFix.lat, gpsFix.lon)) {
+          startRun();
+        } else {
+          // Show GPS not ready message
+          g.setFont("6x8",1);g.setColor(1,1,1);g.setFontAlign(0,0);
+          g.drawString("GPS not ready!", g.getWidth()/2, 170);
+          setTimeout(() => drawScreen(), 2000);
+        }
       }
     }
   }
 });
 
+// Function to validate GPS coordinates
+function isValidGPSCoordinate(lat, lon) {
+  return (typeof lat === 'number' && typeof lon === 'number' && 
+          lat >= -90 && lat <= 90 && 
+          lon >= -180 && lon <= 180 &&
+          lat !== 0 && lon !== 0); // Exclude null island
+}
+
 // GPS handler
 Bangle.on('GPS', function(gps) {
   let oldFix = gpsFix.fix;
   gpsFix = gps;
+  
+  // Debug logging
+  print("RUNSTR GPS Event: fix=" + gps.fix + " lat=" + gps.lat + " lon=" + gps.lon);
 
   if (!running) {
     // If not running, update screen if fix status changes
@@ -380,7 +416,11 @@ Bangle.on('GPS', function(gps) {
     return;
   }
   
-  if (!gps.fix) return;
+  // Must have fix and valid coordinates
+  if (!gps.fix || !isValidGPSCoordinate(gps.lat, gps.lon)) {
+    print("RUNSTR: Invalid GPS data - fix:" + gps.fix + " lat:" + gps.lat + " lon:" + gps.lon);
+    return;
+  }
   
   let currentGPSTime = Date.now(); // Use current time for GPS point if gps.time is not reliable
   if (gps.time) currentGPSTime = gps.time.getTime(); // If gps.time is a Date object
@@ -389,10 +429,12 @@ Bangle.on('GPS', function(gps) {
   // Calculate distance from last position
   if (lastGPS && lastGPS.lat && lastGPS.lon) {
     let dist = calculateDistance(lastGPS.lat, lastGPS.lon, gps.lat, gps.lon);
+    print("RUNSTR: Distance calculated: " + dist + "m");
     
-    // Filter out GPS noise (ignore movements less than 2 meters)
-    if (dist > 2) {
+    // Lower noise filter to 1 meter to catch more movement
+    if (dist > 1) {
       runData.distance += dist;
+      print("RUNSTR: Total distance now: " + runData.distance + "m");
       
       // Calculate current pace (m/s)
       let timeDiff = (currentGPSTime - (lastGPS.time || 0)) / 1000; // seconds
@@ -410,8 +452,12 @@ Bangle.on('GPS', function(gps) {
       });
       
       lastGPS = {lat: gps.lat, lon: gps.lon, time: currentGPSTime, alt: gps.alt, speed: gps.speed};
+    } else {
+      print("RUNSTR: Movement too small (" + dist + "m), ignoring");
     }
   } else {
+    // First GPS point
+    print("RUNSTR: Setting first GPS point");
     lastGPS = {lat: gps.lat, lon: gps.lon, time: currentGPSTime, alt: gps.alt, speed: gps.speed};
     // Also add the first point
      runData.gpsCoords.push({
