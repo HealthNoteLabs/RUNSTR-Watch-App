@@ -1,0 +1,20 @@
+{
+  "id": "sleepstr",
+  "name": "SLEEPSTR - Sleep Tracking & Alarm",
+  "shortName": "SLEEPSTR",
+  "version": "0.01",
+  "description": "A sleep tracking and alarm clock app for Bangle.js. Track sleep duration and quality, set smart alarms, and sync with the SLEEPSTR phone app.",
+  "icon": "app.png",
+  "tags": "health,sleep,alarm,tracking,wellness,healthnotelabs",
+  "type": "app",
+  "supports": ["BANGLEJS2"],
+  "readme": "README.md",
+  "storage": [
+    {"name":"sleepstr.app.js","url":"app.js"},
+    {"name":"sleepstr.img","url":"app-icon.js","evaluate":true}
+  ],
+  "data": [
+    {"name":"sleepstr.json"},
+    {"wildcard":"sleepstr.sleep.*"}
+  ]
+} 

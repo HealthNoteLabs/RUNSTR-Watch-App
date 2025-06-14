@@ -39,5 +39,45 @@
     "data": [
       { "name": "hnl_launcher.json" }
     ]
+  },
+  {
+    "id": "calmstr",
+    "name": "CALMSTR - Meditation & Breathing",
+    "shortName": "CALMSTR",
+    "version": "0.01",
+    "description": "A meditation and breathing app for Bangle.js. Practice 4-7-8 breathing with visual guides, track sessions, and sync with the CALMSTR phone app.",
+    "icon": "app.png",
+    "tags": "health,meditation,mindfulness,breathing,healthnotelabs",
+    "type": "app",
+    "supports": ["BANGLEJS2"],
+    "readme": "README.md",
+    "storage": [
+      { "name": "calmstr.app.js", "url": "apps/calmstr/app.js" },
+      { "name": "calmstr.img", "url": "apps/calmstr/app-icon.js", "evaluate": true }
+    ],
+    "data": [
+      { "name": "calmstr.json" },
+      { "wildcard": "calmstr.session.*" }
+    ]
+  },
+  {
+    "id": "sleepstr",
+    "name": "SLEEPSTR - Sleep Tracking & Alarm",
+    "shortName": "SLEEPSTR",
+    "version": "0.01",
+    "description": "A sleep tracking and alarm clock app for Bangle.js. Track sleep duration and quality, set smart alarms, and sync with the SLEEPSTR phone app.",
+    "icon": "app.png",
+    "tags": "health,sleep,alarm,tracking,wellness,healthnotelabs",
+    "type": "app",
+    "supports": ["BANGLEJS2"],
+    "readme": "README.md",
+    "storage": [
+      { "name": "sleepstr.app.js", "url": "apps/sleepstr/app.js" },
+      { "name": "sleepstr.img", "url": "apps/sleepstr/app-icon.js", "evaluate": true }
+    ],
+    "data": [
+      { "name": "sleepstr.json" },
+      { "wildcard": "sleepstr.sleep.*" }
+    ]
   }
 ] 

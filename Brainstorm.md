@@ -270,4 +270,327 @@ This section is dedicated to diagnosing and brainstorming solutions for specific
     *   **Color Palette Issue?** The code doesn't explicitly set colors. `g.clear()` clears to background (color 0, black). `g.drawString` will use the foreground color (color 1, white, by default after clear). This *should* work. **Actionable Idea:** Be explicit. Add `g.setColor(1)` before `g.drawString`.
     *   **Buffer Format:** The `createArrayBuffer` call includes `{msb:true}`. This is correct for Bangle.js 2. Is it possible it's running on a Bangle.js 1, which might expect a different format? (Unlikely if the UI clipping issue is the guide).
     *   **Corrupt Storage File:** The `runstr.img` file on the watch might be corrupted or empty. **Actionable Idea:** When connected to the Web IDE, check the contents of Storage. Does `runstr.img` exist? Is its size greater than zero? Try deleting the icon from storage and re-uploading the app.
-    *   **Drawing Error:** Is the "R" actually being drawn? Maybe the font size or position is wrong, placing it off the buffer. A 48x48 buffer with a `6x8` font scaled by 2 (so 12x16) at the center (24,24) should be perfectly visible. **Actionable Idea:** Test the icon code directly in the IDE's right-hand panel to see what `g.buffer` contains. 
+    *   **Drawing Error:** Is the "R" actually being drawn? Maybe the font size or position is wrong, placing it off the buffer. A 48x48 buffer with a `6x8` font scaled by 2 (so 12x16) at the center (24,24) should be perfectly visible. **Actionable Idea:** Test the icon code directly in the IDE's right-hand panel to see what `g.buffer` contains.
+
+## X. App Deployment Guide: Uploading RUNSTR and HealthNote Launcher to Bangle.js
+
+This section provides step-by-step instructions for deploying both apps to your Bangle.js watch using the Espruino Web IDE.
+
+### Prerequisites
+- Bangle.js watch with latest firmware
+- Chrome/Chromium-based browser (for Web Bluetooth support)
+- USB cable or Bluetooth connection capability
+
+### A. Preparing the Espruino Web IDE
+
+1. **Access the Web IDE:**
+   - Navigate to [espruino.com/ide](https://www.espruino.com/ide/)
+   - Ensure you're using a Chromium-based browser for Web Bluetooth support
+
+2. **Connect to Your Bangle.js:**
+   - Click the connection icon (plug symbol) in top-left
+   - Choose "Web Bluetooth" for wireless connection
+   - Select your Bangle.js from the device list
+   - Wait for "Connected" status confirmation
+
+3. **Verify Connection:**
+   - Type `LED1.set()` in the left panel and press Enter
+   - Your Bangle.js LED should light up (confirms connection)
+   - Type `LED1.reset()` to turn it off
+
+### B. Uploading RUNSTR App
+
+1. **Clear Previous Versions (if any):**
+   ```javascript
+   // In the left panel of Web IDE:
+   require("Storage").erase("runstr.app.js")
+   require("Storage").erase("runstr.info")
+   require("Storage").erase("runstr.img")
+   require("Storage").erase("runstr.settings.js")
+   ```
+
+2. **Upload App Icon:**
+   - Copy contents of `apps/runstr/app-icon.js`
+   - Paste into left panel and execute
+   - Should show "Compressed icon data written"
+
+3. **Upload Main App File:**
+   - Copy contents of `apps/runstr/runstr.app.js`
+   - In Web IDE, click "Storage" tab (right side)
+   - Click "Upload a file"
+   - Choose "Create new file" with name: `runstr.app.js`
+   - Paste the code and click "Write to Storage"
+
+4. **Upload App Info:**
+   - Copy contents of `apps/runstr/runstr.info`
+   - Upload as new file named: `runstr.info`
+
+5. **Upload Settings (if needed):**
+   - Copy contents of `apps/runstr/runstr.settings.js`
+   - Upload as new file named: `runstr.settings.js`
+
+6. **Verify Installation:**
+   ```javascript
+   // Check files are present:
+   require("Storage").list().filter(f=>f.includes("runstr"))
+   ```
+
+### C. Uploading HealthNote Launcher (HNL)
+
+1. **Clear Previous Versions:**
+   ```javascript
+   require("Storage").erase("hnl_launcher.app.js")
+   require("Storage").erase("hnl_launcher.info")  
+   require("Storage").erase("hnl_launcher.img")
+   ```
+
+2. **Upload App Icon:**
+   - Copy contents of `apps/hnl_launcher/app-icon.js`
+   - Execute in left panel
+
+3. **Upload Main App:**
+   - Copy contents of `apps/hnl_launcher/app.js`
+   - Upload as: `hnl_launcher.app.js`
+
+4. **Upload Metadata:**
+   - Copy contents of `apps/hnl_launcher/metadata.json`
+   - Upload as: `hnl_launcher.info` (convert JSON to .info format if needed)
+
+### D. Testing and Troubleshooting
+
+1. **Launch Apps:**
+   - Press BTN3 (bottom button) to access app launcher
+   - Look for RUNSTR and HealthNote Launcher icons
+   - Tap to launch and verify functionality
+
+2. **Common Issues:**
+   - **Black Icons:** Re-run the app-icon.js scripts
+   - **App Not Appearing:** Check file names match exactly
+   - **Storage Full:** Use `require("Storage").getFree()` to check space
+   - **Connection Issues:** Reset Bangle.js and reconnect
+
+3. **Debug Commands:**
+   ```javascript
+   // Check storage usage:
+   require("Storage").getFree()
+   
+   // List all files:
+   require("Storage").list()
+   
+   // Remove all apps (CAUTION):
+   require("Storage").eraseAll()
+   ```
+
+## XI. Custom Web IDE Platform: Brainstorming RUNSTR App Distribution Hub
+
+This section explores creating a custom web-based IDE/distribution platform specifically for RUNSTR and HealthNote Launcher app updates.
+
+### A. Core Platform Requirements
+
+**Essential Features:**
+- Web Bluetooth connectivity to Bangle.js devices
+- App version management and update detection
+- One-click app installation/updates
+- User-friendly interface for non-technical users
+- Secure app code storage and delivery
+
+**Technical Stack Considerations:**
+- **Frontend:** React/Vue.js with Web Bluetooth API
+- **Backend:** Node.js/Python with file storage
+- **Database:** Store app versions, user preferences, installation stats
+- **CDN:** Fast delivery of app code files
+- **Authentication:** User accounts for preferences and update notifications
+
+### B. Platform Architecture Models
+
+**Model 1: Simple Static Site (Easiest)**
+- Static HTML/JS site hosted on GitHub Pages/Netlify
+- App files stored as JSON/JS modules in repository
+- Direct Web Bluetooth connection for installation
+- Version management through git tags/releases
+- **Pros:** Simple, free hosting, version controlled
+- **Cons:** Limited analytics, no user accounts, manual updates only
+
+**Model 2: Dynamic Web Application (Recommended)**
+- Full-stack web application with database
+- User authentication and preferences
+- Automatic update notifications
+- Analytics dashboard for app usage
+- API for mobile companion apps to check updates
+- **Pros:** Professional, scalable, feature-rich
+- **Cons:** Higher development cost, ongoing hosting costs
+
+**Model 3: Hybrid Progressive Web App (Advanced)**
+- PWA installable on mobile devices
+- Offline capability for app installations
+- Push notifications for updates
+- Integration with mobile companion apps
+- **Pros:** Mobile-first experience, offline support
+- **Cons:** Complex development, PWA limitations
+
+### C. Key Features to Implement
+
+**1. One-Click Installation Flow:**
+```
+User visits site → Connects Bangle.js → Views available apps → 
+Clicks "Install/Update" → Automatic deployment → Success confirmation
+```
+
+**2. Version Management System:**
+- Semantic versioning (1.0.0, 1.0.1, etc.)
+- Changelog display for each version
+- Rollback capability to previous versions
+- Beta/stable release channels
+
+**3. App Catalog Interface:**
+- Grid/list view of available apps
+- Screenshots and descriptions
+- User ratings and reviews
+- Installation statistics
+- Compatibility indicators (Bangle.js 1 vs 2)
+
+**4. Developer Tools:**
+- App submission portal for new versions
+- Code validation and testing tools
+- Deployment pipeline integration
+- Analytics dashboard
+
+### D. Technical Implementation Strategies
+
+**1. Web Bluetooth Integration:**
+```javascript
+// Core connection logic
+class BangleJSConnector {
+  async connect() {
+    const device = await navigator.bluetooth.requestDevice({
+      filters: [{ namePrefix: "Bangle.js" }],
+      optionalServices: ["6e400001-b5a3-f393-e0a9-e50e24dcca9e"]
+    });
+    // Connection and service discovery logic
+  }
+  
+  async uploadApp(appCode, filename) {
+    // Upload logic using Web Bluetooth
+  }
+}
+```
+
+**2. App Package Format:**
+```json
+{
+  "name": "runstr",
+  "version": "1.2.0",
+  "displayName": "RUNSTR",
+  "description": "GPS run tracking for Bangle.js",
+  "files": [
+    {"name": "runstr.app.js", "content": "..."},
+    {"name": "runstr.info", "content": "..."},
+    {"name": "runstr.img", "content": "..."}
+  ],
+  "compatibility": ["banglejs2"],
+  "changelog": "Fixed GPS tracking issues..."
+}
+```
+
+**3. Update Detection Logic:**
+```javascript
+async function checkForUpdates(installedApps) {
+  const remoteVersions = await fetch('/api/app-versions');
+  return installedApps.filter(app => 
+    semver.lt(app.version, remoteVersions[app.name])
+  );
+}
+```
+
+### E. Monetization and Sustainability Models
+
+**Free Tier:**
+- Basic app installation
+- Manual update checking
+- Community support
+
+**Premium Tier ($5/month):**
+- Automatic update notifications
+- Priority support
+- Beta access to new features
+- Advanced analytics
+
+**Enterprise Tier ($50/month):**
+- Custom app deployment
+- Private app repositories
+- API access for integration
+- White-label options
+
+### F. Marketing and User Acquisition Strategy
+
+**Target Audiences:**
+1. **Existing Bangle.js Users:** Current app store users looking for better experience
+2. **Fitness Enthusiasts:** Users specifically interested in RUNSTR functionality
+3. **Nostr Community:** Users interested in decentralized fitness data
+4. **Developers:** Those wanting to distribute their own Bangle.js apps
+
+**Distribution Channels:**
+- Social media (Twitter, Nostr relays)
+- Bangle.js community forums
+- Fitness and quantified-self communities
+- Developer conferences and meetups
+
+**Content Marketing:**
+- Blog posts about Bangle.js development
+- Video tutorials for app installation
+- Case studies of successful deployments
+- Developer documentation and guides
+
+### G. Development Roadmap
+
+**Phase 1 (MVP - 4-6 weeks):**
+- Basic web interface with Web Bluetooth
+- RUNSTR and HNL app installation
+- Simple version management
+- Static hosting deployment
+
+**Phase 2 (Enhanced - 8-10 weeks):**
+- User accounts and preferences
+- Update notifications
+- App catalog with multiple apps
+- Mobile-responsive design
+
+**Phase 3 (Advanced - 12-16 weeks):**
+- Developer portal
+- API for third-party integration
+- Analytics dashboard
+- Premium features implementation
+
+**Phase 4 (Enterprise - 20+ weeks):**
+- White-label solutions
+- Enterprise features
+- Advanced security and compliance
+- Scale optimization
+
+### H. Technical Considerations and Challenges
+
+**1. Web Bluetooth Limitations:**
+- Browser compatibility (Chrome/Edge only)
+- Connection reliability issues
+- Data transfer size limits
+- Security restrictions
+
+**2. App Validation:**
+- Code safety verification
+- Malware detection
+- Resource usage limits
+- Compatibility testing
+
+**3. Storage and Bandwidth:**
+- CDN costs for app delivery
+- Database storage for user data
+- Backup and redundancy
+- Geographic distribution
+
+**4. Legal and Compliance:**
+- Data privacy (GDPR, CCPA)
+- Terms of service for app distribution
+- Liability for third-party apps
+- International regulations
+
+This comprehensive brainstorm provides a foundation for both immediate app deployment needs and long-term platform development goals. The recommended approach is to start with the Espruino Web IDE deployment process while prototyping the custom platform concept. 

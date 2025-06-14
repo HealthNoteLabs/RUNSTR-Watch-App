@@ -1,0 +1,20 @@
+{
+  "id": "calmstr",
+  "name": "CALMSTR - Meditation & Breathing",
+  "shortName": "CALMSTR",
+  "version": "0.01",
+  "description": "A meditation and breathing app for Bangle.js. Practice 4-7-8 breathing with visual guides, track sessions, and sync with the CALMSTR phone app.",
+  "icon": "app.png",
+  "tags": "health,meditation,mindfulness,breathing,healthnotelabs",
+  "type": "app",
+  "supports": ["BANGLEJS2"],
+  "readme": "README.md",
+  "storage": [
+    {"name":"calmstr.app.js","url":"app.js"},
+    {"name":"calmstr.img","url":"app-icon.js","evaluate":true}
+  ],
+  "data": [
+    {"name":"calmstr.json"},
+    {"wildcard":"calmstr.session.*"}
+  ]
+} 
